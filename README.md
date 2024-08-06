@@ -9,3 +9,7 @@ for jpg in *.jpg; do [ ! -f "${jpg%.jpg}.xml" ] && rm "$jpg"; done
 ```bash
 mkdir -p ../data/doc_1 && for jpg in *.jpg; do xml="${jpg%.jpg}.xml"; [ -f "$xml" ] && mv "$jpg" "$xml" ../data/doc_1/; done
 ```
+Ensuite pour ramener dans le bon dossier 
+```bash
+mv ../data/doc_1/* .
+```
