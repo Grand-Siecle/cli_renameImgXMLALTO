@@ -8,6 +8,15 @@ from contextlib import contextmanager
 import multiprocessing as mp
 import tempfile
 from PyPDF2 import PdfMerger
+import re
+
+def natural_sort_key(s):
+    """
+    Function to generate key for natural sorting of strings with numbers.
+    This will ensure "_1_", "_2_", "_10_" are sorted correctly.
+    """
+    return [int(text) if text.isdigit() else text.lower()
+            for text in re.split('([0-9]+)', s)]
 
 @contextmanager
 def managed_image(image_path, mode='RGB'):
@@ -24,7 +33,7 @@ def managed_image(image_path, mode='RGB'):
 def process_single_image(args):
     """Process a single image for multiprocessing."""
     zip_path, filename, temp_dir, dpi = args
-    output_path = os.path.join(temp_dir, f"temp_{os.path.basename(filename)}.pdf")
+    output_path = os.path.join(temp_dir, f"{os.path.basename(filename)}.pdf")
     
     try:
         # Extract the image
@@ -38,7 +47,7 @@ def process_single_image(args):
         # Clean up the temporary image file
         os.remove(temp_image_path)
         
-        return output_path
+        return (filename, output_path)  # Return tuple with original filename
     except Exception as e:
         print(f"Error processing {filename}: {str(e)}")
         if os.path.exists(temp_image_path):
@@ -69,7 +78,7 @@ def is_supported_image(filename):
 def convert_images_to_pdf_parallel(zip_path, output_pdf, progress, dpi=600, num_processes=None):
     """Convert images to PDF using parallel processing."""
     if num_processes is None:
-        num_processes = max(1, mp.cpu_count() // 1)  # Leave one CPU free
+        num_processes = max(1, mp.cpu_count() - 1)  # Leave one CPU free
     
     # Create a temporary directory for processing
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -81,8 +90,8 @@ def convert_images_to_pdf_parallel(zip_path, output_pdf, progress, dpi=600, num_
                 print("No supported image files found in the archive.")
                 return
             
-            # Sort file list to maintain order
-            file_list.sort()
+            # Sort file list using natural sort
+            file_list.sort(key=natural_sort_key)
             
             # Prepare arguments for multiprocessing
             process_args = [(zip_path, filename, temp_dir, dpi) for filename in file_list]
@@ -91,16 +100,18 @@ def convert_images_to_pdf_parallel(zip_path, output_pdf, progress, dpi=600, num_
             with progress:
                 task = progress.add_task("[green]Converting images to PDF...", total=len(file_list))
                 
-                # Process images in parallel
-                pdf_files = []
+                # Process images in parallel and store results in a dictionary
+                results_dict = {}
                 with mp.Pool(num_processes) as pool:
-                    for result in pool.imap(process_single_image, process_args):
+                    for result in pool.imap_unordered(process_single_image, process_args):
                         if result:
-                            pdf_files.append(result)
+                            orig_filename, pdf_path = result
+                            results_dict[orig_filename] = pdf_path
                         progress.advance(task)
                 
-                # Sort PDF files to maintain order
-                pdf_files.sort()
+                # Create ordered list of PDF files based on original file list
+                pdf_files = [results_dict[filename] for filename in file_list 
+                           if filename in results_dict]
                 
                 # Merge PDFs
                 merge_task = progress.add_task("[yellow]Merging PDFs...", total=1)
