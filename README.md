@@ -54,4 +54,7 @@ Supprimer les images n'ayant pas de fichiers xml associés (cas d'HTR non termin
 for jpg in *.jpg; do [ ! -f "${jpg%.jpg}.xml" ] && rm "$jpg"; done
 ```
 
-  
+Supprimer les xml vide
+```bash
+find /chemin/vers/dossier -type f -name "*.xml" -size 0 -delete
+```
